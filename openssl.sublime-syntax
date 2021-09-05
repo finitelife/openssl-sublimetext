@@ -1,0 +1,303 @@
+%YAML 1.2
+---
+# openssl.sublime-completions  - https://www.sublimetext.com/docs/completions.html
+# openssl.sublime-syntax       - https://www.sublimetext.com/docs/3/syntax.html
+# openssl.sublime-settings     - https://www.sublimetext.com/docs/3/settings.html
+# openssl.sublime-color-scheme - https://www.sublimetext.com/docs/3/color_schemes.html
+# another RegEx syntax, thanks - https://github.com/kkos/oniguruma/blob/master/doc/RE
+# scope naming                 - https://www.sublimetext.com/docs/3/scope_naming.html
+# scopes (super not helpful)   - https://macromates.com/manual/en/language_grammars
+# Atom scopes (slightly less)  - https://raw.githubusercontent.com/psmitt/metalanguage/master/examples/ScopeList.ScopeList
+#TODO:
+  #spaces! (not \s?)
+  #first_line_match probably doesn't include newlines
+  #check all the regex again
+    #don't play with backrefs if we don't have to, as they must be fixed length
+    #check all our character constants, they probably don't mean what they think we mean
+  #actual colors:
+    #ASN1 notation
+    #ANY/ALL keywords (get complete list)
+    #default section names (get complete list)
+  #allow line continuation everywhere
+  #escaped comments alone on a line
+  #fix dollarid variable parsing
+  #match unicode escapes \[A-F0-9]{2}
+
+name: OpenSSL Config
+author: Joseph Riopelle <joseph.riopelle@gmail.com>
+file_extensions: [cnf, conf]
+scope: source.sslcnf
+first_line_match: '(?:#\n# OpenSSL example configuration file.|#!.*/(?:open|libre)ssl)|#!/usr/bin/env (?:open|libre)ssl)' #regex to apply syntax to
+#hidden: true #hide from the list
+
+variables: #referenced by {{variable}}
+  section: '[\w\s\.\-]+' #any semi-valid section name
+  name: '[\w\.\-;,]+' #any semi-valid name
+  variable: '[\w]' #any valid variable
+  tabbing: '^(?:\s\s)*(\s?)(?=\S)' #double spaced tabs (eat everythng)
+  nospace: (\s*) #any spaces
+  onespace: \s?(\s*) #any extra spaces
+  onlyspace: '[^\s]*.*'
+contexts:
+  prototype:
+    #- include: escape
+    - include: continue
+    - include: comment
+  escape: #TODO: mark invalid escape sequences?
+    - match: '\\(?=[nbrt$#\\])'
+      scope: punctuation.definition.escape.backslash.sslcnf constant.character.escape.backslash.sslcnf
+      push:
+        - match: n
+          scope: constant.character.escape.sslcnf
+          pop: true
+        - match: b
+          scope: constant.character.escape.backspace.sslcnf constant.character.escape.bell.sslcnf
+          pop: true
+        - match: r
+          scope: constant.character.escape.return.sslcnf
+          pop: true
+        - match: t
+          scope: constant.character.escape.tab.sslcnf
+          pop: true
+        - match: \$
+          scope: constant.character.escape.dollar.sslcnf
+          pop: true
+        - match: \#
+          scope: constant.character.escape.sslcnf
+          pop: true
+        - match: \\
+          scope: constant.character.escape.backslash.sslcnf
+          pop: true
+  continue: #TODO: mark trailing lines
+    - match: '(?<=[^\\])(\\)$\n?'
+      captures:
+        1: punctuation.separator.continuation.sslcnf #, invalid.deprecated.sslcnf #invalid.illegal.unexpected-text.sslcnf
+      #scope: invalid.illegal.whitespace.sslcnf
+      push: # make sure to resume parsing at next line
+        #- match: '.*(?:\\)+$'
+          #scope: invalid.illegal.whitespace.sslcnf
+        - match: (?=\S|^\s*$|\n)  # '\n' for when we matched a string earlier
+        #- match: (?=^\s*$|[^\\]\\$\n?)
+        #- match: (?=\S|^\s*$|[^\\]\\$)
+          pop: true
+    #- match: (?=[^\\]\\$) #(?=\s*$) #(!?:[^\\]\\$)
+    #  pop: true
+  comment: #TODO: leading/trailing internal space
+    - match: \s*(\#)
+      captures:
+        1: punctuation.definition.comment.begin.sslcnf comment.line.number-sign.sslcnf
+      push:
+        - include: escape
+        - include: continue
+        - meta_scope: comment.line.number-sign.sslcnf
+        - match: (?<=#)\s?((?i:notes?|todo|man|tldr|author)\s?(?:-|:)|!(?:/[\w]+)+|man(?:\s(?:openssl-\w+|(?:\w|\(|\))+)|\s?(?:-|:))) #documentation/shebang
+          captures:
+            1: punctuation.definition.comment.begin.sslcnf comment.line.number-sign.sslcnf
+        - match: $
+          pop: true
+  main:
+    - include: section
+    - include: directive
+    - include: name
+    - include: tabbing
+    #- include: escape
+    - include: leftover
+  section:
+    - match: ^{{tabbing}}(\[){{onespace}}(?={{section}}\s*\]\s*) #lookahead for valid section
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: entity.name.tag.sslcnf #storage.type.sslcnf
+        3: invalid.illegal.whitespace.sslcnf
+      push:
+        - match: '\b(?:ENV|default|ca|req|tsa|cmp)\b'
+          scope: storage.type.sslcnf
+          set: section-end
+        - match: '\b{{section}}\b'
+          scope: entity.name.namespace.sslcnf #entity.name.section.sslcnf entity.name.tag.sslcnf
+          set: section-end
+  section-end:
+    - match: '{{onespace}}(\])'
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: entity.name.tag.sslcnf #storage.type.sslcnf
+        #3: invalid.illegal.whitespace.sslcnf
+      pop: true
+
+  directive: #TODO: add dollarid:true|false
+    - match: ^{{tabbing}}(\.include)(?=(?:\s*=\s*|\s+)) #lookahead for valid include
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: support.constant.sslcnf
+      push: [value, directive-mid]
+    - match: ^{{tabbing}}(\.pragma)(?=(?:\s*=\s*|\s+)) #lookahead for valid pragma
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: support.constant.sslcnf
+      push: [dollarid, directive-mid]
+  directive-mid:
+    - match: (?:{{onespace}}(=){{onespace}}|\s{{nospace}})
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: keyword.operator.assignment.sslcnf
+        3: invalid.illegal.whitespace.sslcnf
+        4: invalid.illegal.whitespace.sslcnf
+      pop: true
+  dollarid:
+    - match: (dollarid){{onespace}}(:){{onespace}}(?i:(true|false|on|off))
+      captures:
+        1: support.constant.sslcnf
+        2: invalid.illegal.whitespace.sslcnf
+        3: keyword.operator.assignment.sslcnf
+        4: invalid.illegal.whitespace.sslcnf
+        5: support.constant.sslcnf
+    #  push:
+    #    - match: $
+    #      pop: true
+    - include: value #variable
+    #  push: value
+      pop: true
+
+  name:
+    - match: ^{{tabbing}}([A-Z][A-Z0-9_]*[A-Z0-9]|openssl_conf|config_diagnostics|random|extensions|oid_file|oid_section|asn1)(?=\s*=\s*)
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: support.constant.sslcnf
+      push: [value, name-mid]
+    - match: ^{{tabbing}}(?:(\d+)(\.))?({{name}})(?=\s*=\s*) #lookahead for valid name/assignment
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: constant.numeric.sslcnf
+        3: variable.parameter.sslcnf
+        4: variable.parameter.sslcnf #entity.name.section.sslcnf entity.name.tag.sslcnf
+      push: [value, name-mid]
+  name-mid:
+    - match: '{{onespace}}(=){{onespace}}'
+      captures:
+        1: invalid.illegal.whitespace.sslcnf
+        2: keyword.operator.assignment.sslcnf
+        3: invalid.illegal.whitespace.sslcnf
+      pop: true
+
+  value:
+    - include: escape
+    - include: single-quote
+    - include: double-quote
+    - include: variable
+    - include: url
+    - include: num
+    - include: hex
+    - include: multival
+
+    - include: asn1
+    - include: mods
+    - include: types
+
+    - match: $
+      pop: true
+
+  tabbing: #catch comment tabbing
+    - match: '{{tabbing}}'
+      captures:
+        1: invalid.illegal.whitespace.sslcnf meta.odd-tab.sslcnf
+      #pop: true
+  leftover: #anything not already caught
+    - match: .
+      scope: invalid.illegal.unexpected-text.sslcnf #entity.name.section.sslcnf entity.name.tag.sslcnf
+      #pop: true
+
+  single-quote: #TODO: check which escapes are supported
+    - match: \'
+      scope: punctuation.definition.string.begin.sslcnf
+      push:
+        - meta_include_prototype: false #turn off prototypes
+        - include: continue
+        - include: escape
+        - meta_scope: string.quoted.single.sslcnf
+        - match: $
+          pop: true
+        - match: \\\'
+          scope: constant.character.escape.sslcnf
+        - match: \'
+          scope: punctuation.definition.string.end.sslcnf
+          pop: true
+  double-quote: #TODO: check which escapes are supported
+    - match: \"
+      scope: punctuation.definition.string.begin.sslcnf
+      push:
+        - meta_include_prototype: false #turn off prototypes
+        - include: continue
+        - include: escape
+        - meta_scope: string.quoted.single.sslcnf
+        - match: $
+          pop: true
+        - match: \\\"
+          scope: constant.character.escape.sslcnf
+        - match: \"
+          scope: punctuation.definition.string.end.sslcnf
+          pop: true
+  variable: #TODO: allow line break in the middle of a var - $var ${var} $(var) $::var ${::var} $(::var) $sect::var ${sect::var} $(sect::var)
+    - match: (\$)(?:({{variable}}*)(::))?({{variable}}+)
+      captures:
+        1: punctuation.definition.variable.sslcnf variable.language.sslcnf
+        2: variable.function.sslcnf
+        3: punctuation.accessor.sslcnf #variable.language.sslcnf
+        4: variable.other.member.sslcnf #variable.other.sslcnf variable.parameter.sslcnf
+    - match: (\$)(\{)(?:({{variable}}*)(::))?({{variable}}+)(\})
+      captures:
+        1: punctuation.definition.variable.sslcnf variable.language.sslcnf
+        2: punctuation.definition.variable.sslcnf variable.language.sslcnf
+        3: variable.function.sslcnf
+        4: punctuation.accessor.sslcnf #variable.language.sslcnf
+        5: variable.other.member.sslcnf #variable.other.sslcnf variable.parameter.sslcnf
+        6: punctuation.definition.variable.sslcnf variable.language.sslcnf
+    - match: (\$)(\()(?:({{variable}}*)(::))?({{variable}}+)(\))
+      captures:
+        1: punctuation.definition.variable.sslcnf variable.language.sslcnf
+        2: punctuation.definition.variable.sslcnf variable.language.sslcnf
+        3: variable.function.sslcnf
+        4: punctuation.accessor.sslcnf #variable.language.sslcnf
+        5: variable.other.member.sslcnf #variable.other.sslcnf variable.parameter.sslcnf
+        6: punctuation.definition.variable.sslcnf variable.language.sslcnf
+  multival: #match section color
+    - match: '(?<=\s|,|=)@{{section}}\b'
+      scope: entity.name.namespace.sslcnf #entity.name.section.sslcnf entity.name.tag.sslcnf
+  url: #TODO: check url syntax (don't go crazy about it)
+    - match: '\b[a-z]+\:\/\/' # uri prefix (?:https?|ftps?|s(?:ftp|mb|sh|cp))
+      scope: meta.url.sslcnf constant.other.sslcnf
+      push:
+        - include: variable #parse variables
+        - meta_scope: meta.url.sslcnf constant.other.sslcnf
+        - match: '(?=[^\w\.\-\[\]:+?&=/%;@~])' #uri chars, not including ~#!$'()*,
+          pop: true
+  num:
+    - match: '\b(?:-)?[\d\.]+\b'
+      scope: constant.numeric.float.decimal.sslcnf
+  hex:
+    - match: '\b(?:0x)?(?:[\h]{2})+\b'
+      scope: constant.numeric.integer.hexadecimal.sslcnf
+
+#TODO: all of this again (also maybe be better at ASN.1)
+  asn1:
+    - match: '(ASN1){{onespace}}(\:){{onespace}}'
+      scope: meta.param.sslcnf
+      captures:
+        1: support.constant.sslcnf #storage.modifier.sslcnf
+        2: invalid.illegal.whitespace.sslcnf
+        3: keyword.operator.sslcnf
+        4: invalid.illegal.whitespace.sslcnf
+  mods:
+    - match: '((?:EXP|IMP)(?:LICIT)?|(?:OCT|SEQ|SET|BIT)WRAP|FORMAT){{onespace}}(\:)?{{onespace}}'
+      scope: meta.param.sslcnf
+      captures:
+        1: support.constant.sslcnf #storage.modifier.sslcnf
+        2: invalid.illegal.whitespace.sslcnf
+        3: keyword.operator.sslcnf
+        4: invalid.illegal.whitespace.sslcnf
+  types:
+    - match: '(NULL|BOOL(?:EAN)?|INT(?:EGER)?|ENUM(?:ERATED)?|OBJECT|OID|UTC(?:TIME)?|GEN(?:ERALIZED)?TIME|OCT(?:ETSTRING)?|BITSTR(?:ING)?|UNIV(?:ERSALSTRING)?|(?:IA5|BMP|VISIBLE|PRINTABLE|T61|NUMERIC)(?:STRING)?|UTF8(?:String)?|TELETEXSTRING|GeneralString|SEQ(?:UENCE)?|SET){{onespace}}(\:)?{{onespace}}'
+      scope: meta.param.sslcnf
+      captures:
+        1: support.constant.sslcnf #storage.modifier.sslcnf
+        2: invalid.illegal.whitespace.sslcnf
+        3: keyword.operator.sslcnf
+        4: invalid.illegal.whitespace.sslcnf
