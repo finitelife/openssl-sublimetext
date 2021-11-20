@@ -1,8 +1,0 @@
-{
-  "version": "1.0.0",
-  "url": "https://github.com/finitelife/openssl-sublimetext",
-  "sublime_text": ">=3103",
-  "description": "Sublime Text plugin for the OpenSSL and LibreSSL configuration files",
-  "dependencies": [],
-  "platforms": ["*"]
-}
